@@ -11,7 +11,7 @@
     header { text-align: center; margin-bottom: 1.25rem; }
     header h1 { margin: 0; font-size: 1.85rem; font-weight: 700; color: #0f172a; }
     header p { margin: 0.35rem 0 0; font-size: 0.9rem; color: #64748b; }
-    .toolbar { display: flex; justify-content: flex-end; gap: 0.6rem; margin-bottom: 0.9rem; }
+    .toolbar { display: flex; justify-content: flex-end; margin-bottom: 0.9rem; }
     .btn-clear {
       background: #dc2626; color: #fff; border: none; border-radius: 6px;
       padding: 0.5rem 0.95rem; font-size: 0.85rem; font-weight: 600; cursor: pointer;
@@ -134,122 +134,77 @@
     </div>
   </div>
 
+  <script src="https://cloudflare.com"></script>
   <script>
-    (function () {
-      var EXP = new Array(512);
-      var LOG = new Array(256);
-      var gx = 1;
-      for (var gi = 0; gi < 255; gi++) {
-        EXP[gi] = gx;
-        LOG[gx] = gi;
-        gx = gx << 1;
-        if (gx & 256) gx = gx ^ 285;
-      }
-      for (var gj = 255; gj < 512; gj++) EXP[gj] = EXP[gj - 255];
+    function updateQR(idx) {
+      var val = document.getElementById("f" + idx).value.trim();
+      var slot = document.getElementById("slot-" + idx);
+      var valLabel = document.getElementById("val-" + idx);
+      var dlBtn = document.getElementById("dl-" + idx);
 
-      function gmul(a, b) {
-        return (a === 0 || b === 0) ? 0 : EXP[LOG[a] + LOG[b]];
-      }
+      slot.innerHTML = "";
+      valLabel.textContent = val;
 
-      function polyMul(p1, p2) {
-        var res = new Array(p1.length + p2.length - 1);
-        for (var k = 0; k < res.length; k++) res[k] = 0;
-        for (var i = 0; i < p1.length; i++) {
-          for (var j = 0; j < p2.length; j++) {
-            res[i + j] ^= gmul(p1[i], p2[j]);
-          }
-        }
-        return res;
+      if (!val) {
+        slot.className = "qr-slot";
+        slot.textContent = "Awaiting input...";
+        dlBtn.style.display = "none";
+        return;
       }
 
-      function rsEncode(data, ecLen) {
-        var gen = new Array(0);
-        gen.push(1);
-        for (var i = 0; i < ecLen; i++) {
-          var term = new Array(0);
-          term.push(1);
-          term.push(EXP[i]);
-          gen = polyMul(gen, term);
-        }
-        var res = new Array(data.length + ecLen);
-        for (var m = 0; m < res.length; m++) res[m] = m < data.length ? data[m] : 0;
-        for (var a = 0; a < data.length; a++) {
-          var coef = res[a];
-          if (coef !== 0) {
-            for (var b = 0; b < gen.length; b++) {
-              res[a + b] ^= gmul(gen[b], coef);
+      slot.className = "qr-slot active";
+      new QRCode(slot, {
+        text: val,
+        width: 180,
+        height: 180,
+        colorDark: "#000000",
+        colorLight: "#ffffff",
+        correctLevel: QRCode.CorrectLevel.M
+      });
+      dlBtn.style.display = "inline-block";
+    }
+
+    for (var i = 0; i < 6; i++) {
+      (function (idx) {
+        var input = document.getElementById("f" + idx);
+        input.addEventListener("input", function () { updateQR(idx); });
+        input.addEventListener("paste", function (e) {
+          var clip = e.clipboardData || window.clipboardData;
+          if (!clip) return;
+          var tokens = clip.getData("text").trim().split(/[\t\r\n, ]+/).filter(Boolean);
+          if (tokens.length > 1) {
+            e.preventDefault();
+            for (var j = 0; j < tokens.length; j++) {
+              if (idx + j < 6) {
+                document.getElementById("f" + (idx + j)).value = tokens[j];
+                updateQR(idx + j);
+              }
             }
           }
-        }
-        return res.slice(data.length);
+        });
+
+        document.getElementById("dl-" + idx).addEventListener("click", function () {
+          var slot = document.getElementById("slot-" + idx);
+          var img = slot.querySelector("img");
+          var canvas = slot.querySelector("canvas");
+          var href = (img && img.src) ? img.src : (canvas ? canvas.toDataURL("image/png") : "");
+          if (!href) return;
+          var a = document.createElement("a");
+          var name = document.getElementById("f" + idx).value.trim().replace(/[^a-z0-9_-]/gi, "_");
+          a.download = (name || "qr") + ".png";
+          a.href = href;
+          a.click();
+        });
+      })(i);
+    }
+
+    document.getElementById("btnClear").addEventListener("click", function () {
+      for (var i = 0; i < 6; i++) {
+        document.getElementById("f" + i).value = "";
+        updateQR(i);
       }
-
-      var VER_TABLE = new Array(0);
-      VER_TABLE.push(null);
-      VER_TABLE.push({ tot: 26, ec: 10, blk: 1, align: "" });
-      VER_TABLE.push({ tot: 44, ec: 16, blk: 1, align: "6,18" });
-      VER_TABLE.push({ tot: 70, ec: 26, blk: 1, align: "6,22" });
-      VER_TABLE.push({ tot: 100, ec: 18, blk: 2, align: "6,26" });
-      VER_TABLE.push({ tot: 134, ec: 24, blk: 2, align: "6,30" });
-      VER_TABLE.push({ tot: 172, ec: 16, blk: 4, align: "6,34" });
-      VER_TABLE.push({ tot: 196, ec: 18, blk: 4, align: "6,22,38" });
-      VER_TABLE.push({ tot: 242, ec: 22, blk: 4, align: "6,24,42" });
-      VER_TABLE.push({ tot: 292, ec: 22, blk: 4, align: "6,26,46" });
-      VER_TABLE.push({ tot: 346, ec: 26, blk: 4, align: "6,28,50" });
-
-      function toNums(s) {
-        if (!s) return new Array(0);
-        var parts = s.split(",");
-        var out = new Array(parts.length);
-        for (var i = 0; i < parts.length; i++) out[i] = parseInt(parts[i], 10);
-        return out;
-      }
-
-      function makeQRSVG(text) {
-        var bytes = new Array(0);
-        for (var i = 0; i < text.length; i++) {
-          var code = text.charCodeAt(i);
-          bytes.push(code < 128 ? code : 63);
-        }
-
-        var ver = 1;
-        while (ver <= 10) {
-          var vt = VER_TABLE[ver];
-          var cap = vt.tot - vt.ec * vt.blk;
-          var hdr = ver >= 10 ? 3 : 2;
-          if (bytes.length + hdr <= cap) break;
-          ver++;
-        }
-        if (ver > 10) ver = 10;
-
-        var info = VER_TABLE[ver];
-        var alignList = toNums(info.align);
-        var dataCap = info.tot - info.ec * info.blk;
-        var bits = new Array(0);
-
-        function pushBits(val, len) {
-          for (var b = len - 1; b >= 0; b--) bits.push((val >> b) & 1);
-        }
-
-        pushBits(4, 4);
-        var maxBytes = Math.min(bytes.length, dataCap - 3);
-        pushBits(maxBytes, ver >= 10 ? 16 : 8);
-        for (var bi = 0; bi < maxBytes; bi++) pushBits(bytes[bi], 8);
-        pushBits(0, Math.min(4, dataCap * 8 - bits.length));
-        while (bits.length % 8 !== 0) bits.push(0);
-
-        var dataCW = new Array(dataCap);
-        var byteCount = bits.length / 8;
-        for (var ci = 0; ci < byteCount; ci++) {
-          var val = 0;
-          for (var bit = 0; bit < 8; bit++) val = (val << 1) | bits[ci * 8 + bit];
-          dataCW[ci] = val;
-        }
-        var padIdx = 0;
-        for (var pi = byteCount; pi < dataCap; pi++) {
-          dataCW[pi] = (padIdx % 2 === 0) ? 236 : 17;
-          padIdx++;
-        }
-
-        var numBlks = info.blk;
-        var ecPerBlk = info.ec;
+      document.getElementById("f0").focus();
+    });
+  </script>
+</body>
+</html>
